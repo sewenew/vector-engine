@@ -19,26 +19,8 @@
 
 namespace sw::vengine {
 
-UvError::UvError(int err, const std::string &msg) : Error(err_msg(err) + ", " + msg) {}
+UvError::UvError(int err, const std::string &msg) : Error(uv::err_msg(err) + ", " + msg) {}
     
-namespace uv {
-
-namespace detail {
-
-TcpUPtr make_tcp(uv_loop_t &loop, bool is_ipv6);
-
-bool is_ipv6(const std::string &ip);
-
-void reuse_port(uv_tcp_t &server);
-
-void enable_nodelay(uv_tcp_t &server);
-
-void enable_keepalive(uv_tcp_t &server, const std::chrono::seconds &keepalive);
-
-void bind_server(uv_tcp_t &server, const std::string &ip, int port);
-
-}
-
 void LoopDeleter::operator()(uv_loop_t *loop) const {
     if (loop == nullptr) {
         return;
@@ -70,6 +52,24 @@ void LoopDeleter::operator()(uv_loop_t *loop) const {
     delete loop;
 }
 
+namespace uv {
+
+namespace detail {
+
+TcpUPtr make_tcp(uv_loop_t &loop, bool is_ipv6);
+
+bool is_ipv6(const std::string &ip);
+
+void reuse_port(uv_tcp_t &server);
+
+void enable_nodelay(uv_tcp_t &server);
+
+void enable_keepalive(uv_tcp_t &server, const std::chrono::seconds &keepalive);
+
+void bind_server(uv_tcp_t &server, const std::string &ip, int port);
+
+}
+
 LoopUPtr make_loop() {
     auto loop = std::make_unique<uv_loop_t>();
     auto err = uv_loop_init(loop.get());
@@ -80,7 +80,7 @@ LoopUPtr make_loop() {
     return LoopUPtr(loop.release());
 }
 
-AsyncUPtr make_async(uv_loop_t &loop, uv_async_cb *callback, void *data) {
+AsyncUPtr make_async(uv_loop_t &loop, uv_async_cb callback, void *data) {
     auto uv_async = std::make_unique<uv_async_t>();
     auto err = uv_async_init(&loop, uv_async.get(), callback);
     if (err != 0) {
@@ -107,7 +107,7 @@ TcpUPtr make_tcp(uv_loop_t &loop, const TcpOptions &options, uv_connection_cb on
 
     detail::bind_server(*server, options.ip, options.port);
 
-    err = uv_listen(to_stream(server.get()), options.backlog, on_connect);
+    auto err = uv_listen(to_stream(server.get()), options.backlog, on_connect);
     if (err != 0) {
         throw UvError(err, "failed to listen to port");
     }
@@ -119,7 +119,7 @@ namespace detail {
 
 TcpUPtr make_tcp(uv_loop_t &loop, bool is_ipv6) {
     unsigned int flags = AF_INET;
-    if (is_ipv6()) {
+    if (is_ipv6) {
         flags = AF_INET6;
     }
 

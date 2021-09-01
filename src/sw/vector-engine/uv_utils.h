@@ -22,12 +22,31 @@
 #include <chrono>
 #include <string>
 #include <uv.h>
+#include "errors.h"
 
 namespace sw::vengine {
     
 class UvError : public Error {
 public:
-    UvError(const std::string &msg, int err);
+    UvError(int err, const std::string &msg);
+};
+
+struct LoopDeleter {
+    void operator()(uv_loop_t *loop) const;
+};
+
+using LoopUPtr = std::unique_ptr<uv_loop_t, LoopDeleter>;
+
+using AsyncUPtr = std::unique_ptr<uv_async_t>;
+
+using TcpUPtr = std::unique_ptr<uv_tcp_t>;
+
+struct TcpOptions {
+    std::string ip;
+    int port;
+    int backlog;
+    std::chrono::seconds keepalive;
+    bool nodelay;
 };
 
 namespace uv {
@@ -62,32 +81,14 @@ inline std::string err_msg(int err) {
     std::string name = uv_err_name(err);
     std::string msg = uv_strerror(err);
 
-    return name + ": " msg;
+    return name + ": " + msg;
 }
-
-struct LoopDeleter {
-    void operator()(uv_loop_t *loop) const;
-};
-
-using LoopUPtr = std::unique_ptr<uv_loop_t, LoopDeleter>;
 
 LoopUPtr make_loop();
 
-using AsyncUPtr = std::unique_ptr<uv_async_t>;
-
 AsyncUPtr make_async(uv_loop_t &loop, uv_async_cb *callback, void *data = nullptr);
 
-using TcpUPtr = std::unique_ptr<uv_tcp_t>;
-
-struct TcpOptions {
-    std::string ip;
-    int port;
-    int backlog;
-    std::chrono::seconds keepalive;
-    bool nodelay;
-};
-
-TcpUPtr make_tcp(uv_loop_t &loop, const TcpOptions &options);
+TcpUPtr make_tcp(uv_loop_t &loop, const TcpOptions &options, uv_connection_cb on_connect);
 
 }
 
