@@ -56,11 +56,11 @@ namespace uv {
 
 namespace detail {
 
-TcpUPtr make_tcp(uv_loop_t &loop, bool is_ipv6);
+TcpUPtr make_tcp_server(uv_loop_t &loop, bool is_ipv6);
 
 bool is_ipv6(const std::string &ip);
 
-void reuse_port(uv_tcp_t &server);
+void enable_reuseport(uv_tcp_t &server);
 
 void enable_nodelay(uv_tcp_t &server);
 
@@ -92,10 +92,10 @@ AsyncUPtr make_async(uv_loop_t &loop, uv_async_cb callback, void *data) {
     return uv_async;
 }
 
-TcpUPtr make_tcp(uv_loop_t &loop, const TcpOptions &options, uv_connection_cb on_connect) {
-    auto server = detail::make_tcp(loop, detail::is_ipv6(options.ip));
+TcpUPtr make_tcp_server(uv_loop_t &loop, const TcpOptions &options, uv_connection_cb on_connect) {
+    auto server = detail::make_tcp_server(loop, detail::is_ipv6(options.ip));
 
-    detail::reuse_port(*server);
+    detail::enable_reuseport(*server);
 
     if (options.nodelay) {
         detail::enable_nodelay(*server);
@@ -115,9 +115,18 @@ TcpUPtr make_tcp(uv_loop_t &loop, const TcpOptions &options, uv_connection_cb on
     return server;
 }
 
+TcpUPtr make_tcp_client(uv_loop_t &loop, void *data) {
+    auto client = std::make_unique<uv_tcp_t>();
+    uv_tcp_init(&loop, client.get());
+
+    set_handle_data(client.get(), data);
+
+    return client;
+}
+
 namespace detail {
 
-TcpUPtr make_tcp(uv_loop_t &loop, bool is_ipv6) {
+TcpUPtr make_tcp_server(uv_loop_t &loop, bool is_ipv6) {
     unsigned int flags = AF_INET;
     if (is_ipv6) {
         flags = AF_INET6;
@@ -133,7 +142,7 @@ bool is_ipv6(const std::string &ip) {
     return ip.find(":") != std::string::npos;
 }
 
-void reuse_port(uv_tcp_t &server) {
+void enable_reuseport(uv_tcp_t &server) {
     int fd = 0;
     auto err = uv_fileno(to_handle(&server), &fd);
     if (err != 0) {

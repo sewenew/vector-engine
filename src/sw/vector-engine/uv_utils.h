@@ -52,7 +52,7 @@ struct TcpOptions {
 namespace uv {
 
 template <typename Handle>
-inline uv_handle_t* to_handle(Handle *handle) {
+inline uv_handle_t* to_handle(Handle *handle) noexcept {
     static_assert(std::is_same_v<Handle, uv_handle_t> ||
             std::is_same_v<Handle, uv_stream_t> ||
             std::is_same_v<Handle, uv_tcp_t>);
@@ -60,21 +60,26 @@ inline uv_handle_t* to_handle(Handle *handle) {
 }
 
 template <typename Stream>
-inline uv_stream_t* to_stream(Stream *stream) {
+inline uv_stream_t* to_stream(Stream *stream) noexcept {
     static_assert(std::is_same_v<Stream, uv_stream_t> ||
             std::is_same_v<Stream, uv_tcp_t>);
     return reinterpret_cast<uv_stream_t*>(stream);
 }
 
 template <typename Handle>
-inline void set_handle_data(Handle *handle, void *data) {
+inline void handle_set_data(Handle *handle, void *data) noexcept {
     uv_handle_set_data(to_handle(handle), data);
 }
 
 template <typename Result, typename Handle>
-inline Result* get_handle_data(Handle *handle) {
+inline Result* handle_get_data(Handle *handle) noexcept {
     auto *data = uv_handle_get_data(to_handle(handle));
     return static_cast<Result *>(data);
+}
+
+template <typename Handle>
+inline void handle_close(Handle *handle, uv_close_cb callback) noexcept {
+    uv_close(to_handle(handle), callback);
 }
 
 inline std::string err_msg(int err) {
@@ -88,7 +93,9 @@ LoopUPtr make_loop();
 
 AsyncUPtr make_async(uv_loop_t &loop, uv_async_cb *callback, void *data = nullptr);
 
-TcpUPtr make_tcp(uv_loop_t &loop, const TcpOptions &options, uv_connection_cb on_connect);
+TcpUPtr make_tcp_server(uv_loop_t &loop, const TcpOptions &options, uv_connection_cb on_connect);
+
+TcpUPtr make_tcp_client(uv_loop_t &loop, void *data = nullptr);
 
 }
 
