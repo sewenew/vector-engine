@@ -22,7 +22,7 @@ namespace sw::vengine {
 ReadBuffer::ReadBuffer(std::size_t min_size, std::size_t max_size) :
     _min_size(min_size),
     _max_size(max_size) {
-    assert(_min_size > 0 && _min_size <= _max_size) {
+    assert(_min_size > 0 && _min_size <= _max_size);
 
     _size = 0;
     _buf.resize(_min_size);

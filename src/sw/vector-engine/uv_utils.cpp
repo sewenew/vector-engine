@@ -87,7 +87,7 @@ AsyncUPtr make_async(uv_loop_t &loop, uv_async_cb callback, void *data) {
         throw UvError(err, "failed to make uv async");
     }
 
-    uv_async->data = data;
+    handle_set_data(uv_async.get(), data);
 
     return uv_async;
 }
@@ -119,7 +119,7 @@ TcpUPtr make_tcp_client(uv_loop_t &loop, void *data) {
     auto client = std::make_unique<uv_tcp_t>();
     uv_tcp_init(&loop, client.get());
 
-    set_handle_data(client.get(), data);
+    handle_set_data(client.get(), data);
 
     return client;
 }

@@ -55,7 +55,8 @@ template <typename Handle>
 inline uv_handle_t* to_handle(Handle *handle) noexcept {
     static_assert(std::is_same_v<Handle, uv_handle_t> ||
             std::is_same_v<Handle, uv_stream_t> ||
-            std::is_same_v<Handle, uv_tcp_t>);
+            std::is_same_v<Handle, uv_tcp_t> ||
+            std::is_same_v<Handle, uv_async_t>);
     return reinterpret_cast<uv_handle_t *>(handle);
 }
 
@@ -91,7 +92,7 @@ inline std::string err_msg(int err) {
 
 LoopUPtr make_loop();
 
-AsyncUPtr make_async(uv_loop_t &loop, uv_async_cb *callback, void *data = nullptr);
+AsyncUPtr make_async(uv_loop_t &loop, uv_async_cb callback, void *data = nullptr);
 
 TcpUPtr make_tcp_server(uv_loop_t &loop, const TcpOptions &options, uv_connection_cb on_connect);
 

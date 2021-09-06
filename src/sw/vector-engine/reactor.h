@@ -21,6 +21,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <thread>
 #include <optional>
 #include "uv_utils.h"
 #include "read_buffer.h"
@@ -47,7 +48,7 @@ public:
     ~Connection() = default;
 
     ReadBuffer& read_buffer() {
-        return _buf;
+        return _read_buf;
     }
 
     Reactor& reactor() {
@@ -67,23 +68,37 @@ struct RespRequest {
 class RespRequestParser {
 public:
     // @return pair<vector<RespRequest>, number of bytes parsed>
-    auto parse(const std::string_view &data) const
+    auto parse(std::string_view data) const
         -> std::pair<std::vector<RespRequest>, std::size_t>;
 
 private:
-    std::optional<std::size_t> _parse_num(char c, std::string_view &data);
+    std::optional<std::size_t> _parse_num(char c, std::string_view &data) const;
 
-    std::optional<std::size_t> _parse_argc(std::string_view &data) {
+    std::optional<std::size_t> _parse_argc(std::string_view &data) const {
         // *n\r\n
-        return _parse_num('*');
+        return _parse_num('*', data);
     }
 
-    std::optional<std::string> _parse_argv(std::string_view &data);
+    std::optional<std::string> _parse_argv(std::string_view &data) const;
+};
+
+struct ReactorOptions {
+    TcpOptions tcp_opts;
+
+    ConnectionOptions connection_opts;
 };
 
 class Reactor {
 public:
-    Reactor();
+    explicit Reactor(const ReactorOptions &opts);
+
+    Reactor(const Reactor &) = delete;
+    Reactor& operator=(const Reactor &) = delete;
+
+    Reactor(Reactor &&) = delete;
+    Reactor& operator=(Reactor &&) = delete;
+
+    ~Reactor();
 
 private:
     static void _on_connect(uv_stream_t *server, int status);
@@ -94,13 +109,19 @@ private:
 
     static void _on_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf);
 
-    void _submit_request(std::vector<RespRequest> requests);
+    static void _on_stop(uv_async_t *handle);
 
-    ConnectionOptions _opts;
+    void _stop();
+
+    ReactorOptions _opts;
 
     LoopUPtr _loop;
 
     TcpUPtr _server;
+
+    AsyncUPtr _stop_async;
+
+    std::thread _loop_thread;
 };
 
 }

@@ -16,13 +16,14 @@
 
 #include "reactor.h"
 #include <cassert>
+#include <iostream>
 #include <charconv>
 #include "errors.h"
 
 namespace sw::vengine {
 
 Connection::Connection(const ConnectionOptions &opts, Reactor &reactor) :
-    _buf(opts.read_buf_min_size, opts.read_buf_max_size),
+    _read_buf(opts.read_buf_min_size, opts.read_buf_max_size),
     _reactor(reactor) {}
 
 auto RespRequestParser::parse(std::string_view buffer) const
@@ -39,7 +40,7 @@ auto RespRequestParser::parse(std::string_view buffer) const
         }
         RespRequest req;
         auto &args = req.args;
-        args.reserve(argc);
+        args.reserve(*argc);
         auto idx = 0U;
         for ( ; idx != *argc; ++idx) {
             auto argv = _parse_argv(buffer);
@@ -62,7 +63,7 @@ auto RespRequestParser::parse(std::string_view buffer) const
     return std::make_pair(std::move(requests), bytes_parsed);
 }
 
-std::optional<std::size_t> RespRequestParser::_parse_num(char c, std::string_view &buffer) {
+std::optional<std::size_t> RespRequestParser::_parse_num(char c, std::string_view &buffer) const {
     if (buffer.empty()) {
         return std::nullopt;
     }
@@ -97,7 +98,7 @@ std::optional<std::size_t> RespRequestParser::_parse_num(char c, std::string_vie
     return argc;
 }
 
-std::optional<std::string> RespRequestParser::_parse_argv(std::string_view &buffer) {
+std::optional<std::string> RespRequestParser::_parse_argv(std::string_view &buffer) const {
     // $n\r\nxxxxx\r\n
     auto num = _parse_num('$', buffer);
     if (!num) {
@@ -111,12 +112,16 @@ std::optional<std::string> RespRequestParser::_parse_argv(std::string_view &buff
         return std::nullopt;
     }
 
-    auto *last = buffer.data() + buffer.size();
-    if (*(last - 2) != '\r' || *(last - 1) != '\n') {
+    auto *last = buffer.data() + len;
+    if (*last != '\r' || *(last + 1) != '\n') {
         throw Error("expect '\\r\\n'");
     }
 
-    return std::string(buffer.data(), len);
+    std::string argv(buffer.data(), len);
+
+    buffer.remove_prefix(len + 2);
+
+    return argv;
 }
 
 void Reactor::_on_connect(uv_stream_t *server, int status) {
@@ -132,8 +137,8 @@ void Reactor::_on_connect(uv_stream_t *server, int status) {
 
     assert(reactor != nullptr);
 
-    auto conn = std::make_unique<Connection>(reactor->_opts);
-    auto client = uv::make_tcp_client(reactor->_loop.get(), conn.get());
+    auto conn = std::make_unique<Connection>(reactor->_opts.connection_opts, *reactor);
+    auto client = uv::make_tcp_client(*(reactor->_loop), conn.get());
     auto *cli = client.get();
     if (uv_accept(server, uv::to_stream(cli)) == 0) {
         uv_read_start(uv::to_stream(cli), _on_alloc, _on_read);
@@ -156,25 +161,37 @@ void Reactor::_on_close(uv_handle_t *handle) {
 void Reactor::_on_alloc(uv_handle_t *handle, std::size_t suggested_size, uv_buf_t *buf) {
     auto *conn = uv::handle_get_data<Connection>(handle);
 
-    std::tie(buf->base, buf->len) = conn->buffer().alloc(suggested_size);
+    std::tie(buf->base, buf->len) = conn->read_buffer().alloc(suggested_size);
 }
 
 void Reactor::_on_read(uv_stream_t *client, ssize_t nread, const uv_buf_t * /*buf*/) {
     if (nread > 0) {
         auto *conn = uv::handle_get_data<Connection>(client);
 
-        auto &buffer = conn->buffer();
-        buffer.update(nread);
+        auto &buffer = conn->read_buffer();
+        buffer.occupy(nread);
 
         try {
             RespRequestParser parser;
-            auto [requests, len] = parer.parse(buffer.data());
-            buffer.dealloc(len);
+            auto [requests, len] = parser.parse(buffer.data());
+
+            if (!requests.empty()) {
+                assert(len > 0);
+
+                buffer.dealloc(len);
+
+                for (const auto &ele : requests) {
+                    for (const auto &e : ele.args) {
+                        std::cout << e << std::endl;
+                    }
+                }
+                std::cout << "--------" << std::endl;
+            }
 
             auto &reactor = conn->reactor();
-            reactor->_submit_requests(std::move(requests));
         } catch (const Error &e) {
             // TODO: do log and send error reply
+            std::cerr << e.what() << ", " << buffer.data() << std::endl;
             uv::handle_close(client, _on_close);
             return;
         }
@@ -185,18 +202,44 @@ void Reactor::_on_read(uv_stream_t *client, ssize_t nread, const uv_buf_t * /*bu
             // TODO: do log
             // TODO: maybe send some error info to client before closing.
             // TODO: if the buffer is full, we need to tell client that the request is too large.
+            std::cerr << "nread < 0" << std::endl;
             uv::handle_close(client, _on_close);
         }
     }
 }
 
-Reactor::Reactor() : _loop(uv::make_loop()) {
-    TcpOptions tcp_opts;
-    _server = std::make_tcp_server(*_loop, tcp_opts, _on_connect);
+void Reactor::_on_stop(uv_async_t *handle) {
+    assert(handle != nullptr);
+
+    auto *reactor = uv::handle_get_data<Reactor>(handle);
+    assert(reactor != nullptr);
+
+    // TODO: clean up
+
+    uv_stop(reactor->_loop.get());
+}
+
+Reactor::Reactor(const ReactorOptions &opts) :
+    _loop(uv::make_loop()),
+    _opts(opts) {
+    _server = uv::make_tcp_server(*_loop, _opts.tcp_opts, _on_connect);
     uv::handle_set_data(_server.get(), this);
 
-    _opts.read_buf_min_size = 64 * 1024;
-    _opts.read_buf_max_size = 20 * 1024 * 1024;
+    _stop_async = uv::make_async(*_loop, _on_stop, this);
+
+    _loop_thread = std::thread([this]() { uv_run(this->_loop.get(), UV_RUN_DEFAULT); });
+}
+
+Reactor::~Reactor() {
+    if (_loop_thread.joinable()) {
+        _loop_thread.join();
+    }
+}
+
+void Reactor::_stop() {
+    assert(_stop_async);
+
+    uv_async_send(_stop_async.get());
 }
 
 }
