@@ -41,6 +41,8 @@ using AsyncUPtr = std::unique_ptr<uv_async_t>;
 
 using TcpUPtr = std::unique_ptr<uv_tcp_t>;
 
+using WriteUPtr = std::unique_ptr<uv_write_t>;
+
 struct TcpOptions {
     std::string ip;
     int port;
@@ -67,15 +69,17 @@ inline uv_stream_t* to_stream(Stream *stream) noexcept {
     return reinterpret_cast<uv_stream_t*>(stream);
 }
 
-template <typename Handle>
-inline void handle_set_data(Handle *handle, void *data) noexcept {
-    uv_handle_set_data(to_handle(handle), data);
+template <typename Ptr>
+inline void set_data(Ptr *ptr, void *data) noexcept {
+    assert(ptr != nullptr);
+    ptr->data = data;
 }
 
-template <typename Result, typename Handle>
-inline Result* handle_get_data(Handle *handle) noexcept {
-    auto *data = uv_handle_get_data(to_handle(handle));
-    return static_cast<Result *>(data);
+template <typename Result, typename Ptr>
+inline Result* get_data(Ptr *ptr) noexcept {
+    assert(ptr != nullptr);
+    auto *data = ptr->data;
+    return static_cast<Result*>(data);
 }
 
 template <typename Handle>
@@ -94,9 +98,14 @@ LoopUPtr make_loop();
 
 AsyncUPtr make_async(uv_loop_t &loop, uv_async_cb callback, void *data = nullptr);
 
-TcpUPtr make_tcp_server(uv_loop_t &loop, const TcpOptions &options, uv_connection_cb on_connect);
+TcpUPtr make_tcp_server(uv_loop_t &loop,
+            const TcpOptions &options,
+            uv_connection_cb on_connect,
+            void *data);
 
 TcpUPtr make_tcp_client(uv_loop_t &loop, void *data = nullptr);
+
+WriteUPtr make_write(uv_loop_t &loop, void *data = nullptr);
 
 }
 

@@ -19,73 +19,29 @@
 
 #include <memory>
 #include <string>
-#include <string_view>
-#include <vector>
 #include <thread>
-#include <optional>
+#include <unordered_map>
 #include "uv_utils.h"
-#include "read_buffer.h"
+#include "connection.h"
+#include "worker.h"
 
 namespace sw::vengine {
-
-struct ConnectionOptions {
-    std::size_t read_buf_min_size;
-    std::size_t read_buf_max_size;
-};
-
-class Reactor;
-
-class Connection {
-public:
-    Connection(const ConnectionOptions &opts, Reactor &reactor);
-
-    Connection(const Connection &) = delete;
-    Connection& operator=(const Connection &) = delete;
-
-    Connection(Connection &&) = delete;
-    Connection& operator=(Connection &&) = delete;
-
-    ~Connection() = default;
-
-    ReadBuffer& read_buffer() {
-        return _read_buf;
-    }
-
-    Reactor& reactor() {
-        return _reactor;
-    }
-
-private:
-    ReadBuffer _read_buf;
-
-    Reactor &_reactor;
-};
-
-struct RespRequest {
-    std::vector<std::string> args;
-};
-
-class RespRequestParser {
-public:
-    // @return pair<vector<RespRequest>, number of bytes parsed>
-    auto parse(std::string_view data) const
-        -> std::pair<std::vector<RespRequest>, std::size_t>;
-
-private:
-    std::optional<std::size_t> _parse_num(char c, std::string_view &data) const;
-
-    std::optional<std::size_t> _parse_argc(std::string_view &data) const {
-        // *n\r\n
-        return _parse_num('*', data);
-    }
-
-    std::optional<std::string> _parse_argv(std::string_view &data) const;
-};
 
 struct ReactorOptions {
     TcpOptions tcp_opts;
 
     ConnectionOptions connection_opts;
+};
+
+struct ReplyContext {
+    explicit ReplyContext(Reply r) : reply(std::move(r)) {
+        buf.base = reply.reply.data();
+        buf.len = reply.reply.size();
+    }
+
+    Reply reply;
+
+    uv_buf_t buf;
 };
 
 class Reactor {
@@ -100,6 +56,8 @@ public:
 
     ~Reactor();
 
+    void send(Reply reply);
+
 private:
     static void _on_connect(uv_stream_t *server, int status);
 
@@ -111,7 +69,25 @@ private:
 
     static void _on_stop(uv_async_t *handle);
 
+    static void _on_reply(uv_async_t *handle);
+
+    static void _on_write(uv_write_t *req, int status);
+
     void _stop();
+
+    void _notify();
+
+    std::pair<uint64_t, TcpUPtr> _create_client();
+
+    void _close_client(uv_handle_t *handle);
+
+    uint64_t _connection_id() {
+        return _connection_cnt++;
+    }
+
+    void _send();
+
+    void _send(Reply reply);
 
     ReactorOptions _opts;
 
@@ -121,7 +97,17 @@ private:
 
     AsyncUPtr _stop_async;
 
+    AsyncUPtr _reply_async;
+
     std::thread _loop_thread;
+
+    uint64_t _connection_cnt = 0;
+
+    std::unordered_map<uint64_t, uv_tcp_t*> _connections;
+
+    std::mutex _mutex;
+
+    std::vector<Reply> _replies;
 };
 
 }

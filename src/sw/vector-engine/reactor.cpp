@@ -17,111 +17,18 @@
 #include "reactor.h"
 #include <cassert>
 #include <iostream>
-#include <charconv>
 #include "errors.h"
+#include "resp.h"
 
 namespace sw::vengine {
 
-Connection::Connection(const ConnectionOptions &opts, Reactor &reactor) :
-    _read_buf(opts.read_buf_min_size, opts.read_buf_max_size),
-    _reactor(reactor) {}
-
-auto RespRequestParser::parse(std::string_view buffer) const
-    -> std::pair<std::vector<RespRequest>, std::size_t> {
-    auto *first = buffer.data();
-    std::vector<RespRequest> requests;
-    std::size_t bytes_parsed = 0;
-
-    while (true) {
-        auto argc = _parse_argc(buffer);
-        if (!argc) {
-            // Incomplete request.
-            break;
-        }
-        RespRequest req;
-        auto &args = req.args;
-        args.reserve(*argc);
-        auto idx = 0U;
-        for ( ; idx != *argc; ++idx) {
-            auto argv = _parse_argv(buffer);
-            if (!argv) {
-                // Incomplete request.
-                break;
-            }
-            args.push_back(std::move(*argv));
-        }
-
-        if (idx < *argc) {
-            // Incomplete request.
-            break;
-        }
-
-        requests.push_back(std::move(req));
-        bytes_parsed = (buffer.data() - first);
+void Reactor::send(Reply reply) {
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        _replies.push_back(std::move(reply));
     }
 
-    return std::make_pair(std::move(requests), bytes_parsed);
-}
-
-std::optional<std::size_t> RespRequestParser::_parse_num(char c, std::string_view &buffer) const {
-    if (buffer.empty()) {
-        return std::nullopt;
-    }
-
-    if (buffer.front() != c) {
-        throw Error("expect " + std::string(1, c));
-    }
-
-    buffer.remove_prefix(1);
-
-    if (buffer.empty()) {
-        return std::nullopt;
-    }
-
-    std::size_t argc = 0;
-    auto *last = buffer.data() + buffer.size();
-    auto [ptr, err] = std::from_chars(buffer.data(), last, argc);
-    if (err != std::errc()) {
-        throw Error("expect a positive integer");
-    }
-
-    if (ptr + 2 > last) {
-        return std::nullopt;
-    }
-
-    if (*ptr != '\r' || *(ptr + 1) != '\n') {
-        throw Error("expect '\\r\\n'");
-    }
-
-    buffer.remove_prefix(ptr + 2 - buffer.data());
-
-    return argc;
-}
-
-std::optional<std::string> RespRequestParser::_parse_argv(std::string_view &buffer) const {
-    // $n\r\nxxxxx\r\n
-    auto num = _parse_num('$', buffer);
-    if (!num) {
-        // Incomplete request.
-        return std::nullopt;
-    }
-
-    auto len = *num;
-
-    if (buffer.size() < len + 2) {
-        return std::nullopt;
-    }
-
-    auto *last = buffer.data() + len;
-    if (*last != '\r' || *(last + 1) != '\n') {
-        throw Error("expect '\\r\\n'");
-    }
-
-    std::string argv(buffer.data(), len);
-
-    buffer.remove_prefix(len + 2);
-
-    return argv;
+    _notify();
 }
 
 void Reactor::_on_connect(uv_stream_t *server, int status) {
@@ -133,12 +40,11 @@ void Reactor::_on_connect(uv_stream_t *server, int status) {
 
     assert(server != nullptr);
 
-    auto *reactor = uv::handle_get_data<Reactor>(server);
+    auto *reactor = uv::get_data<Reactor>(server);
 
     assert(reactor != nullptr);
 
-    auto conn = std::make_unique<Connection>(reactor->_opts.connection_opts, *reactor);
-    auto client = uv::make_tcp_client(*(reactor->_loop), conn.get());
+    auto [id, client] = reactor->_create_client();
     auto *cli = client.get();
     if (uv_accept(server, uv::to_stream(cli)) == 0) {
         uv_read_start(uv::to_stream(cli), _on_alloc, _on_read);
@@ -146,33 +52,33 @@ void Reactor::_on_connect(uv_stream_t *server, int status) {
         uv::handle_close(cli, _on_close);
     }
 
-    client.release();
-    conn.release();
+    reactor->_connections.emplace(id, client.release());
 }
 
 void Reactor::_on_close(uv_handle_t *handle) {
-    auto *conn = uv::handle_get_data<Connection>(handle);
-    delete conn;
+    assert(handle != nullptr);
 
-    auto *client = reinterpret_cast<uv_tcp_t *>(handle);
-    delete client;
+    auto *connection = uv::get_data<Connection>(handle);
+    assert(connection != nullptr);
+
+    connection->reactor()._close_client(handle);
 }
 
 void Reactor::_on_alloc(uv_handle_t *handle, std::size_t suggested_size, uv_buf_t *buf) {
-    auto *conn = uv::handle_get_data<Connection>(handle);
+    auto *conn = uv::get_data<Connection>(handle);
 
     std::tie(buf->base, buf->len) = conn->read_buffer().alloc(suggested_size);
 }
 
 void Reactor::_on_read(uv_stream_t *client, ssize_t nread, const uv_buf_t * /*buf*/) {
     if (nread > 0) {
-        auto *conn = uv::handle_get_data<Connection>(client);
+        auto *conn = uv::get_data<Connection>(client);
 
         auto &buffer = conn->read_buffer();
         buffer.occupy(nread);
 
         try {
-            RespRequestParser parser;
+            RespCommandParser parser;
             auto [requests, len] = parser.parse(buffer.data());
 
             if (!requests.empty()) {
@@ -187,8 +93,6 @@ void Reactor::_on_read(uv_stream_t *client, ssize_t nread, const uv_buf_t * /*bu
                 }
                 std::cout << "--------" << std::endl;
             }
-
-            auto &reactor = conn->reactor();
         } catch (const Error &e) {
             // TODO: do log and send error reply
             std::cerr << e.what() << ", " << buffer.data() << std::endl;
@@ -211,7 +115,7 @@ void Reactor::_on_read(uv_stream_t *client, ssize_t nread, const uv_buf_t * /*bu
 void Reactor::_on_stop(uv_async_t *handle) {
     assert(handle != nullptr);
 
-    auto *reactor = uv::handle_get_data<Reactor>(handle);
+    auto *reactor = uv::get_data<Reactor>(handle);
     assert(reactor != nullptr);
 
     // TODO: clean up
@@ -219,13 +123,35 @@ void Reactor::_on_stop(uv_async_t *handle) {
     uv_stop(reactor->_loop.get());
 }
 
+void Reactor::_on_reply(uv_async_t *handle) {
+    assert(handle != nullptr);
+
+    auto *reactor = uv::get_data<Reactor>(handle);
+    assert(reactor != nullptr);
+
+    reactor->_send();
+}
+
+void Reactor::_on_write(uv_write_t *req, int status) {
+    if (status < 0) {
+        // TODO: failed to do write.
+        return;
+    }
+
+    auto *ctx = uv::get_data<ReplyContext>(req);
+    delete ctx;
+
+    delete req;
+}
+
 Reactor::Reactor(const ReactorOptions &opts) :
     _loop(uv::make_loop()),
     _opts(opts) {
-    _server = uv::make_tcp_server(*_loop, _opts.tcp_opts, _on_connect);
-    uv::handle_set_data(_server.get(), this);
+    _server = uv::make_tcp_server(*_loop, _opts.tcp_opts, _on_connect, this);
 
     _stop_async = uv::make_async(*_loop, _on_stop, this);
+
+    _reply_async = uv::make_async(*_loop, _on_reply, this);
 
     _loop_thread = std::thread([this]() { uv_run(this->_loop.get(), UV_RUN_DEFAULT); });
 }
@@ -240,6 +166,66 @@ void Reactor::_stop() {
     assert(_stop_async);
 
     uv_async_send(_stop_async.get());
+}
+
+void Reactor::_notify() {
+    assert(_reply_async);
+
+    uv_async_send(_reply_async.get());
+}
+
+std::pair<uint64_t, TcpUPtr> Reactor::_create_client() {
+    auto id = _connection_id();
+    auto conn = std::make_unique<Connection>(id, _opts.connection_opts, *this);
+
+    auto client = uv::make_tcp_client(*_loop, conn.get());
+
+    conn.release();
+
+    return std::make_pair(id, std::move(client));
+}
+
+void Reactor::_close_client(uv_handle_t *handle) {
+    assert(handle != nullptr);
+
+    auto *connection = uv::get_data<Connection>(handle);
+    assert(connection != nullptr);
+
+    _connections.erase(connection->id());
+
+    delete connection;
+
+    auto *client = reinterpret_cast<uv_tcp_t*>(handle);
+    delete client;
+}
+
+void Reactor::_send(Reply reply) {
+    auto iter = _connections.find(reply.connection_id);
+    if (iter == _connections.end()) {
+        // Connection has been closed.
+        return;
+    }
+
+    auto *client = iter->second;
+    assert(client != nullptr);
+
+    auto ctx = std::make_unique<ReplyContext>(std::move(reply));
+    auto w = uv::make_write(*_loop, ctx.get());
+    uv_write(w.get(), reinterpret_cast<uv_stream_t*>(client), &(ctx->buf), 1, _on_write);
+    ctx.release();
+    w.release();
+}
+
+void Reactor::_send() {
+    std::vector<Reply> replies;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        replies.swap(_replies);
+    }
+
+    for (auto &reply : replies) {
+        _send(reply);
+    }
 }
 
 }
