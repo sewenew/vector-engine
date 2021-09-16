@@ -48,9 +48,13 @@ Worker::~Worker() {
 }
 
 void Worker::submit(Task task) {
-    std::lock_guard<std::mutex> lock(_mutex);
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
 
-    _tasks.push_back(std::move(task));
+        _tasks.push_back(std::move(task));
+    }
+
+    _cv.notify_one();
 }
 
 void Worker::_run() {
@@ -121,6 +125,23 @@ void Worker::_send_reply(Reply reply) {
     auto *reactor = reply.reactor;
 
     reactor->send(std::move(reply));
+}
+
+WorkerPool::WorkerPool(std::size_t num) {
+    if (num == 0) {
+        throw Error("size of worker pool must larger than 0");
+    }
+
+    _workers.reserve(num);
+    for (auto idx = 0U; idx != num; ++idx) {
+        _workers.push_back(std::make_unique<Worker>());
+    }
+}
+
+Worker& WorkerPool::fetch(uint64_t id) {
+    assert(_workers.size() > 0);
+
+    return *(_workers[id % _workers.size()]);
 }
 
 }

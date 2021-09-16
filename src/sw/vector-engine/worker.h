@@ -20,6 +20,7 @@
 #include <vector>
 #include <mutex>
 #include <atomic>
+#include <memory>
 #include <thread>
 #include <condition_variable>
 #include "resp.h"
@@ -72,8 +73,21 @@ private:
     std::condition_variable _cv;
 
     std::atomic<bool> _stop{false};
-
 };
+
+using WorkerUPtr = std::unique_ptr<Worker>;
+
+class WorkerPool {
+public:
+    explicit WorkerPool(std::size_t num);
+
+    Worker& fetch(uint64_t id);
+
+private:
+    std::vector<WorkerUPtr> _workers;
+};
+
+using WorkerPoolSPtr = std::shared_ptr<WorkerPool>;
 
 }
 

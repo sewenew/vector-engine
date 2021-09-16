@@ -46,7 +46,7 @@ struct ReplyContext {
 
 class Reactor {
 public:
-    explicit Reactor(const ReactorOptions &opts);
+    Reactor(const ReactorOptions &opts, const WorkerPoolSPtr &worker_pool);
 
     Reactor(const Reactor &) = delete;
     Reactor& operator=(const Reactor &) = delete;
@@ -73,6 +73,8 @@ private:
 
     static void _on_write(uv_write_t *req, int status);
 
+    static void _on_timer(uv_timer_t *handle);
+
     void _stop();
 
     void _notify();
@@ -88,6 +90,8 @@ private:
     void _send();
 
     void _send(Reply reply);
+
+    void _dispatch(Connection &connection, std::vector<RespCommand> requests);
 
     ReactorOptions _opts;
 
@@ -108,6 +112,10 @@ private:
     std::mutex _mutex;
 
     std::vector<Reply> _replies;
+
+    WorkerPoolSPtr _worker_pool;
+
+    uv_timer_t timer;
 };
 
 }

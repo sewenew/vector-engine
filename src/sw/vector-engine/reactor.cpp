@@ -35,6 +35,7 @@ void Reactor::_on_connect(uv_stream_t *server, int status) {
     if (status < 0) {
         // TODO: do log instead of throw exception
         //throw UvError(status, "failed to create new connection");
+        std::cout << "on connect error: " << uv::err_msg(status) << std::endl;
         return;
     }
 
@@ -45,10 +46,12 @@ void Reactor::_on_connect(uv_stream_t *server, int status) {
     assert(reactor != nullptr);
 
     auto [id, client] = reactor->_create_client();
+    std::cout << "in on connect: " << id << std::endl;
     auto *cli = client.get();
     if (uv_accept(server, uv::to_stream(cli)) == 0) {
         uv_read_start(uv::to_stream(cli), _on_alloc, _on_read);
     } else {
+        std::cout << "refuse to accept" << std::endl;
         uv::handle_close(cli, _on_close);
     }
 
@@ -60,6 +63,7 @@ void Reactor::_on_close(uv_handle_t *handle) {
 
     auto *connection = uv::get_data<Connection>(handle);
     assert(connection != nullptr);
+    std::cout << "close conneciton: " << connection->id() << std::endl;
 
     connection->reactor()._close_client(handle);
 }
@@ -92,6 +96,8 @@ void Reactor::_on_read(uv_stream_t *client, ssize_t nread, const uv_buf_t * /*bu
                     }
                 }
                 std::cout << "--------" << std::endl;
+
+                conn->reactor()._dispatch(*conn, std::move(requests));
             }
         } catch (const Error &e) {
             // TODO: do log and send error reply
@@ -144,9 +150,10 @@ void Reactor::_on_write(uv_write_t *req, int status) {
     delete req;
 }
 
-Reactor::Reactor(const ReactorOptions &opts) :
+Reactor::Reactor(const ReactorOptions &opts, const WorkerPoolSPtr &worker_pool) :
     _loop(uv::make_loop()),
-    _opts(opts) {
+    _opts(opts),
+    _worker_pool(worker_pool) {
     _server = uv::make_tcp_server(*_loop, _opts.tcp_opts, _on_connect, this);
 
     _stop_async = uv::make_async(*_loop, _on_stop, this);
@@ -154,9 +161,17 @@ Reactor::Reactor(const ReactorOptions &opts) :
     _reply_async = uv::make_async(*_loop, _on_reply, this);
 
     _loop_thread = std::thread([this]() { uv_run(this->_loop.get(), UV_RUN_DEFAULT); });
+    uv_timer_init(_loop.get(), &timer);
+    uv_timer_start(&timer, _on_timer, 2000, 2000);
+}
+
+void Reactor::_on_timer(uv_timer_t *handle) {
+    std::cout << "timer" << std::endl;
 }
 
 Reactor::~Reactor() {
+    _stop();
+
     if (_loop_thread.joinable()) {
         _loop_thread.join();
     }
@@ -226,6 +241,13 @@ void Reactor::_send() {
     for (auto &reply : replies) {
         _send(reply);
     }
+}
+
+void Reactor::_dispatch(Connection &connection, std::vector<RespCommand> requests) {
+    auto id = connection.id();
+    auto &worker = _worker_pool->fetch(id);
+    Task task = {std::move(requests), id, this};
+    worker.submit(std::move(task));
 }
 
 }
