@@ -126,9 +126,9 @@ RespReplyBuilder& RespReplyBuilder::append_bulk_string(const std::string_view &s
     reply.reserve(1 + len.size() + 2 + str.size() + 2);
     reply.push_back('$');
     reply.insert(reply.end(), len.data(), len.data() + len.size());
-    reply += "\\r\\n";
+    reply += "\r\n";
     reply.insert(reply.end(), str.data(), str.data() + str.size());
-    reply += "\\r\\n";
+    reply += "\r\n";
 
     _buffer += reply;
 
@@ -140,7 +140,7 @@ RespReplyBuilder& RespReplyBuilder::_append_string(char type, const std::string_
     reply.reserve(1 + str.size() + 2);
     reply.push_back(type);
     reply.insert(reply.end(), str.data(), str.data() + str.size());
-    reply += "\\r\\n";
+    reply += "\r\n";
 
     _buffer += reply;
 

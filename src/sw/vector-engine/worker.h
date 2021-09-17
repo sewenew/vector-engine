@@ -53,6 +53,8 @@ public:
 
     void submit(Task task);
 
+    void stop();
+
 private:
     void _run();
 
@@ -71,8 +73,6 @@ private:
     std::mutex _mutex;
 
     std::condition_variable _cv;
-
-    std::atomic<bool> _stop{false};
 };
 
 using WorkerUPtr = std::unique_ptr<Worker>;
@@ -81,7 +81,13 @@ class WorkerPool {
 public:
     explicit WorkerPool(std::size_t num);
 
+    ~WorkerPool() {
+        stop();
+    }
+
     Worker& fetch(uint64_t id);
+
+    void stop();
 
 private:
     std::vector<WorkerUPtr> _workers;

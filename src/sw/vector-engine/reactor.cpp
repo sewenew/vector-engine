@@ -90,13 +90,6 @@ void Reactor::_on_read(uv_stream_t *client, ssize_t nread, const uv_buf_t * /*bu
 
                 buffer.dealloc(len);
 
-                for (const auto &ele : requests) {
-                    for (const auto &e : ele.args) {
-                        std::cout << e << std::endl;
-                    }
-                }
-                std::cout << "--------" << std::endl;
-
                 conn->reactor()._dispatch(*conn, std::move(requests));
             }
         } catch (const Error &e) {
@@ -166,18 +159,17 @@ Reactor::Reactor(const ReactorOptions &opts, const WorkerPoolSPtr &worker_pool) 
 }
 
 void Reactor::_on_timer(uv_timer_t *handle) {
-    std::cout << "timer" << std::endl;
 }
 
 Reactor::~Reactor() {
-    _stop();
+    stop();
 
     if (_loop_thread.joinable()) {
         _loop_thread.join();
     }
 }
 
-void Reactor::_stop() {
+void Reactor::stop() {
     assert(_stop_async);
 
     uv_async_send(_stop_async.get());
@@ -244,10 +236,14 @@ void Reactor::_send() {
 }
 
 void Reactor::_dispatch(Connection &connection, std::vector<RespCommand> requests) {
-    auto id = connection.id();
-    auto &worker = _worker_pool->fetch(id);
-    Task task = {std::move(requests), id, this};
-    worker.submit(std::move(task));
+    try {
+        auto id = connection.id();
+        auto &worker = _worker_pool->fetch(id);
+        Task task = {std::move(requests), id, this};
+        worker.submit(std::move(task));
+    } catch (const Error &e) {
+        // TODO: worker pool has been stopped.
+    }
 }
 
 }

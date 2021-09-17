@@ -40,7 +40,7 @@ Worker::Worker() {
 }
 
 Worker::~Worker() {
-    _stop = true;
+    stop();
 
     if (_worker.joinable()) {
         _worker.join();
@@ -57,14 +57,28 @@ void Worker::submit(Task task) {
     _cv.notify_one();
 }
 
+void Worker::stop() {
+    Task task;
+    task.reactor = nullptr;
+
+    submit(task);
+}
+
 void Worker::_run() {
-    while (!_stop) {
+    while (true) {
         auto tasks = _fetch_tasks();
 
+        bool stop_thread = false;
         for (auto &task : tasks) {
-            // TODO: if there's a null task, we should break the loop.
+            if (task.reactor == nullptr) {
+                stop_thread = true;
+                continue;
+            }
             auto reply = _run_task(std::move(task));
             _send_reply(std::move(reply));
+        }
+        if (stop_thread) {
+            break;
         }
     }
 }
@@ -116,6 +130,16 @@ void Worker::_run_cmd(const RespCommand &cmd, RespReplyBuilder &builder) {
         builder.append_integer(0);
         builder.append_integer(0);
         builder.append_integer(0);
+    } else if (name == "nil") {
+        builder.append_nil();
+    } else if (name == "int") {
+        builder.append_integer(1000);
+    } else if (name == "str") {
+        builder.append_simple_string("string");
+    } else if (name == "bulk") {
+        builder.append_bulk_string("bulk");
+    } else if (name == "err") {
+        builder.append_error("error");
     } else {
         builder.append_error("unknown command: " + name);
     }
@@ -141,7 +165,21 @@ WorkerPool::WorkerPool(std::size_t num) {
 Worker& WorkerPool::fetch(uint64_t id) {
     assert(_workers.size() > 0);
 
-    return *(_workers[id % _workers.size()]);
+    auto &worker = _workers[id % _workers.size()];
+    if (worker) {
+        return *worker;
+    } else {
+        throw Error("worker has been stopped");
+    }
+}
+
+void WorkerPool::stop() {
+    for (auto &worker : _workers) {
+        if (worker) {
+            worker->stop();
+            worker = nullptr;
+        }
+    }
 }
 
 }

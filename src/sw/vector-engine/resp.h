@@ -48,7 +48,7 @@ private:
 class RespReplyBuilder {
 public:
     RespReplyBuilder& append_ok() {
-        _buffer += "+OK\\r\\n";
+        _buffer += "+OK\r\n";
         return *this;
     }
 
@@ -71,7 +71,7 @@ public:
 
     RespReplyBuilder& append_nil() {
         // $-1\r\n
-        _buffer += "$-1\\r\\n";
+        _buffer += "$-1\r\n";
         return *this;
     }
 

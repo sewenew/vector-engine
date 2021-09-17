@@ -58,6 +58,8 @@ public:
 
     void send(Reply reply);
 
+    void stop();
+
 private:
     static void _on_connect(uv_stream_t *server, int status);
 
@@ -74,8 +76,6 @@ private:
     static void _on_write(uv_write_t *req, int status);
 
     static void _on_timer(uv_timer_t *handle);
-
-    void _stop();
 
     void _notify();
 
@@ -94,8 +94,6 @@ private:
     void _dispatch(Connection &connection, std::vector<RespCommand> requests);
 
     ReactorOptions _opts;
-
-    LoopUPtr _loop;
 
     TcpUPtr _server;
 
@@ -116,6 +114,8 @@ private:
     WorkerPoolSPtr _worker_pool;
 
     uv_timer_t timer;
+
+    LoopUPtr _loop;
 };
 
 }
