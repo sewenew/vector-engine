@@ -46,9 +46,16 @@ void Reactor::_on_connect(uv_stream_t *server, int status) {
     assert(reactor != nullptr);
 
     auto [id, client] = reactor->_create_client();
-    std::cout << "in on connect: " << id << std::endl;
     auto *cli = client.get();
     if (uv_accept(server, uv::to_stream(cli)) == 0) {
+        auto keepalive = reactor->_opts.tcp_opts.keepalive.count();
+        if (keepalive > 0) {
+            if (auto err = uv_tcp_keepalive(cli, 1, keepalive); err != 0) {
+                // TODO: log error
+                uv::handle_close(cli, _on_close);
+                return;
+            }
+        }
         uv_read_start(uv::to_stream(cli), _on_alloc, _on_read);
     } else {
         std::cout << "refuse to accept" << std::endl;
@@ -63,7 +70,6 @@ void Reactor::_on_close(uv_handle_t *handle) {
 
     auto *connection = uv::get_data<Connection>(handle);
     assert(connection != nullptr);
-    std::cout << "close conneciton: " << connection->id() << std::endl;
 
     connection->reactor()._close_client(handle);
 }
@@ -105,9 +111,8 @@ void Reactor::_on_read(uv_stream_t *client, ssize_t nread, const uv_buf_t * /*bu
             // TODO: do log
             // TODO: maybe send some error info to client before closing.
             // TODO: if the buffer is full, we need to tell client that the request is too large.
-            std::cerr << "nread < 0" << std::endl;
-            uv::handle_close(client, _on_close);
-        }
+        } // else client closed the connection
+        uv::handle_close(client, _on_close);
     }
 }
 

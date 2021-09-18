@@ -140,6 +140,8 @@ void Worker::_run_cmd(const RespCommand &cmd, RespReplyBuilder &builder) {
         builder.append_bulk_string("bulk");
     } else if (name == "err") {
         builder.append_error("error");
+    } else if (name == "ping") {
+        builder.append_simple_string("PONG");
     } else {
         builder.append_error("unknown command: " + name);
     }

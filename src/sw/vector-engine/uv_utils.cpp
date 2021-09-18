@@ -64,8 +64,6 @@ void enable_reuseport(uv_tcp_t &server);
 
 void enable_nodelay(uv_tcp_t &server);
 
-void enable_keepalive(uv_tcp_t &server, const std::chrono::seconds &keepalive);
-
 void bind_server(uv_tcp_t &server, const std::string &ip, int port);
 
 }
@@ -102,10 +100,6 @@ TcpUPtr make_tcp_server(uv_loop_t &loop,
 
     if (options.nodelay) {
         detail::enable_nodelay(*server);
-    }
-
-    if (options.keepalive > std::chrono::seconds(0)) {
-        detail::enable_keepalive(*server, options.keepalive);
     }
 
     detail::bind_server(*server, options.ip, options.port);
@@ -173,13 +167,6 @@ void enable_nodelay(uv_tcp_t &server) {
     auto err = uv_tcp_nodelay(&server, 1);
     if (err != 0) {
         throw UvError(err, "failed to enable tcp nodelay");
-    }
-}
-
-void enable_keepalive(uv_tcp_t &server, const std::chrono::seconds &keepalive) {
-    auto err = uv_tcp_keepalive(&server, 1, keepalive.count());
-    if (err != 0) {
-        throw UvError(err, "failed to enable tcp keepalive");
     }
 }
 
