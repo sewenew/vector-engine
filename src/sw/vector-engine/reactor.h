@@ -56,18 +56,18 @@ public:
 
     ~Reactor();
 
-    void send(Reply reply);
+    void send(std::vector<Reply> replies);
 
     void stop();
 
+    void remove_connection(ConnectionId id) {
+        _connections.erase(id);
+    }
+
+    void dispatch(ConnectionId id, std::vector<RespCommand> requests);
+
 private:
     static void _on_connect(uv_stream_t *server, int status);
-
-    static void _on_close(uv_handle_t *handle);
-
-    static void _on_alloc(uv_handle_t *handle, std::size_t suggested_size, uv_buf_t *buf);
-
-    static void _on_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf);
 
     static void _on_stop(uv_async_t *handle);
 
@@ -79,19 +79,15 @@ private:
 
     void _notify();
 
-    std::pair<uint64_t, TcpUPtr> _create_client();
+    std::pair<ConnectionId, TcpUPtr> _create_client();
 
-    void _close_client(uv_handle_t *handle);
-
-    uint64_t _connection_id() {
+    ConnectionId _connection_id() {
         return _connection_cnt++;
     }
 
     void _send();
 
     void _send(Reply reply);
-
-    void _dispatch(Connection &connection, std::vector<RespCommand> requests);
 
     ReactorOptions _opts;
 
@@ -105,7 +101,7 @@ private:
 
     uint64_t _connection_cnt = 0;
 
-    std::unordered_map<uint64_t, uv_tcp_t*> _connections;
+    std::unordered_map<ConnectionId , uv_tcp_t*> _connections;
 
     std::mutex _mutex;
 

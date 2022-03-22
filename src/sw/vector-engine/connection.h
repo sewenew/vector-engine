@@ -18,6 +18,7 @@
 #define SW_VECTOR_ENGINE_CONNECTION_H
 
 #include "read_buffer.h"
+#include "uv_utils.h"
 
 namespace sw::vengine {
 
@@ -28,12 +29,11 @@ struct ConnectionOptions {
     std::size_t read_buf_max_size;
 };
 
+using ConnectionId = uint64_t;
+
 class Connection {
 public:
-    Connection(uint64_t id, const ConnectionOptions &opts, Reactor &reactor) :
-        _id(id),
-        _read_buf(opts.read_buf_min_size, opts.read_buf_max_size),
-        _reactor(reactor) {}
+    Connection(ConnectionId id, const ConnectionOptions &opts, Reactor &reactor);
 
     Connection(const Connection &) = delete;
     Connection& operator=(const Connection &) = delete;
@@ -43,20 +43,18 @@ public:
 
     ~Connection() = default;
 
-    ReadBuffer& read_buffer() noexcept {
-        return _read_buf;
-    }
-
-    Reactor& reactor() noexcept {
-        return _reactor;
-    }
-
-    uint64_t id() const noexcept {
+    ConnectionId id() const noexcept {
         return _id;
     }
 
+    static void on_alloc(uv_handle_t *handle, std::size_t suggested_size, uv_buf_t *buf);
+
+    static void on_close(uv_handle_t *handle);
+
+    static void on_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf);
+
 private:
-    uint64_t _id;
+    ConnectionId _id;
 
     ReadBuffer _read_buf;
 

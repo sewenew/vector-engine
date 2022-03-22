@@ -103,7 +103,7 @@ TcpUPtr make_tcp_server(uv_loop_t &loop,
             uv_connection_cb on_connect,
             void *data);
 
-TcpUPtr make_tcp_client(uv_loop_t &loop, void *data = nullptr);
+TcpUPtr make_tcp_client(uv_loop_t &loop, const std::chrono::seconds &keepalive, void *data = nullptr);
 
 WriteUPtr make_write(uv_loop_t &loop, void *data = nullptr);
 

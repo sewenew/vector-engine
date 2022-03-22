@@ -116,11 +116,19 @@ TcpUPtr make_tcp_server(uv_loop_t &loop,
     return server;
 }
 
-TcpUPtr make_tcp_client(uv_loop_t &loop, void *data) {
+TcpUPtr make_tcp_client(uv_loop_t &loop, const std::chrono::seconds &keepalive, void *data) {
     auto client = std::make_unique<uv_tcp_t>();
-    uv_tcp_init(&loop, client.get());
+    auto *cli = client.get();
+    uv_tcp_init(&loop, cli);
 
-    set_data(client.get(), data);
+    if (keepalive > std::chrono::seconds(0)) {
+        if (auto err = uv_tcp_keepalive(cli, 1, keepalive.count()); err != 0) {
+            handle_close(cli, nullptr);
+            throw UvError(err, "failed to set keepalive");
+        }
+    }
+
+    set_data(cli, data);
 
     return client;
 }

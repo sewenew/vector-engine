@@ -69,14 +69,19 @@ void Worker::_run() {
         auto tasks = _fetch_tasks();
 
         bool stop_thread = false;
+        std::vector<Reply> replies;
+        replies.reserve(tasks.size());
         for (auto &task : tasks) {
             if (task.reactor == nullptr) {
                 stop_thread = true;
                 continue;
             }
-            auto reply = _run_task(std::move(task));
-            _send_reply(std::move(reply));
+            auto reply = _run_task(task);
+            replies.emplace_back(std::move(reply));
+
+            task.reactor->send(std::move(replies));
         }
+
         if (stop_thread) {
             break;
         }
@@ -98,10 +103,9 @@ std::vector<Task> Worker::_fetch_tasks() {
     return tasks;
 }
 
-Reply Worker::_run_task(Task task) {
+Reply Worker::_run_task(const Task &task) {
     Reply reply;
     reply.connection_id = task.connection_id;
-    reply.reactor = task.reactor;
     RespReplyBuilder builder;
     for (const auto &cmd : task.cmds) {
         _run_cmd(cmd, builder);
@@ -145,12 +149,6 @@ void Worker::_run_cmd(const RespCommand &cmd, RespReplyBuilder &builder) {
     } else {
         builder.append_error("unknown command: " + name);
     }
-}
-
-void Worker::_send_reply(Reply reply) {
-    auto *reactor = reply.reactor;
-
-    reactor->send(std::move(reply));
 }
 
 WorkerPool::WorkerPool(std::size_t num) {

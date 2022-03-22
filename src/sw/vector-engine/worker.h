@@ -38,11 +38,9 @@ struct Task {
 };
 
 struct Reply {
-    std::string reply;
-
     uint64_t connection_id;
 
-    Reactor *reactor;
+    std::string reply;
 };
 
 class Worker {
@@ -60,11 +58,9 @@ private:
 
     std::vector<Task> _fetch_tasks();
 
-    Reply _run_task(Task task);
+    Reply _run_task(const Task &task);
 
     void _run_cmd(const RespCommand &cmd, RespReplyBuilder &builder);
-
-    void _send_reply(Reply reply);
 
     std::thread _worker;
 

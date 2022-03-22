@@ -22,15 +22,6 @@
 
 namespace sw::vengine {
 
-void Reactor::send(Reply reply) {
-    {
-        std::lock_guard<std::mutex> lock(_mutex);
-        _replies.push_back(std::move(reply));
-    }
-
-    _notify();
-}
-
 void Reactor::_on_connect(uv_stream_t *server, int status) {
     if (status < 0) {
         // TODO: do log instead of throw exception
@@ -48,72 +39,13 @@ void Reactor::_on_connect(uv_stream_t *server, int status) {
     auto [id, client] = reactor->_create_client();
     auto *cli = client.get();
     if (uv_accept(server, uv::to_stream(cli)) == 0) {
-        auto keepalive = reactor->_opts.tcp_opts.keepalive.count();
-        if (keepalive > 0) {
-            if (auto err = uv_tcp_keepalive(cli, 1, keepalive); err != 0) {
-                // TODO: log error
-                uv::handle_close(cli, _on_close);
-                return;
-            }
-        }
-        uv_read_start(uv::to_stream(cli), _on_alloc, _on_read);
+        uv_read_start(uv::to_stream(cli), Connection::on_alloc, Connection::on_read);
     } else {
         std::cout << "refuse to accept" << std::endl;
-        uv::handle_close(cli, _on_close);
+        uv::handle_close(cli, Connection::on_close);
     }
 
     reactor->_connections.emplace(id, client.release());
-}
-
-void Reactor::_on_close(uv_handle_t *handle) {
-    assert(handle != nullptr);
-
-    auto *connection = uv::get_data<Connection>(handle);
-    assert(connection != nullptr);
-
-    connection->reactor()._close_client(handle);
-}
-
-void Reactor::_on_alloc(uv_handle_t *handle, std::size_t suggested_size, uv_buf_t *buf) {
-    auto *conn = uv::get_data<Connection>(handle);
-
-    std::tie(buf->base, buf->len) = conn->read_buffer().alloc(suggested_size);
-}
-
-void Reactor::_on_read(uv_stream_t *client, ssize_t nread, const uv_buf_t * /*buf*/) {
-    if (nread > 0) {
-        auto *conn = uv::get_data<Connection>(client);
-
-        auto &buffer = conn->read_buffer();
-        buffer.occupy(nread);
-
-        try {
-            RespCommandParser parser;
-            auto [requests, len] = parser.parse(buffer.data());
-
-            if (!requests.empty()) {
-                assert(len > 0);
-
-                buffer.dealloc(len);
-
-                conn->reactor()._dispatch(*conn, std::move(requests));
-            }
-        } catch (const Error &e) {
-            // TODO: do log and send error reply
-            std::cerr << e.what() << ", " << buffer.data() << std::endl;
-            uv::handle_close(client, _on_close);
-            return;
-        }
-    }
-
-    if (nread < 0) {
-        if (nread != UV_EOF) {
-            // TODO: do log
-            // TODO: maybe send some error info to client before closing.
-            // TODO: if the buffer is full, we need to tell client that the request is too large.
-        } // else client closed the connection
-        uv::handle_close(client, _on_close);
-    }
 }
 
 void Reactor::_on_stop(uv_async_t *handle) {
@@ -148,6 +80,9 @@ void Reactor::_on_write(uv_write_t *req, int status) {
     delete req;
 }
 
+void Reactor::_on_timer(uv_timer_t *handle) {
+}
+
 Reactor::Reactor(const ReactorOptions &opts, const WorkerPoolSPtr &worker_pool) :
     _loop(uv::make_loop()),
     _opts(opts),
@@ -163,15 +98,23 @@ Reactor::Reactor(const ReactorOptions &opts, const WorkerPoolSPtr &worker_pool) 
     uv_timer_start(&timer, _on_timer, 2000, 2000);
 }
 
-void Reactor::_on_timer(uv_timer_t *handle) {
-}
-
 Reactor::~Reactor() {
     stop();
 
     if (_loop_thread.joinable()) {
         _loop_thread.join();
     }
+}
+
+void Reactor::send(std::vector<Reply> replies) {
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        _replies.insert(_replies.end(),
+                std::make_move_iterator(replies.begin()),
+                std::make_move_iterator(replies.end()));
+    }
+
+    _notify();
 }
 
 void Reactor::stop() {
@@ -186,29 +129,18 @@ void Reactor::_notify() {
     uv_async_send(_reply_async.get());
 }
 
-std::pair<uint64_t, TcpUPtr> Reactor::_create_client() {
+std::pair<ConnectionId, TcpUPtr> Reactor::_create_client() {
     auto id = _connection_id();
     auto conn = std::make_unique<Connection>(id, _opts.connection_opts, *this);
+    auto *connection = conn.get();
 
-    auto client = uv::make_tcp_client(*_loop, conn.get());
+    auto client = uv::make_tcp_client(*_loop, _opts.tcp_opts.keepalive, connection);
+
+    _connections.emplace(id, client.get());
 
     conn.release();
 
     return std::make_pair(id, std::move(client));
-}
-
-void Reactor::_close_client(uv_handle_t *handle) {
-    assert(handle != nullptr);
-
-    auto *connection = uv::get_data<Connection>(handle);
-    assert(connection != nullptr);
-
-    _connections.erase(connection->id());
-
-    delete connection;
-
-    auto *client = reinterpret_cast<uv_tcp_t*>(handle);
-    delete client;
 }
 
 void Reactor::_send(Reply reply) {
@@ -240,9 +172,8 @@ void Reactor::_send() {
     }
 }
 
-void Reactor::_dispatch(Connection &connection, std::vector<RespCommand> requests) {
+void Reactor::dispatch(ConnectionId id, std::vector<RespCommand> requests) {
     try {
-        auto id = connection.id();
         auto &worker = _worker_pool->fetch(id);
         Task task = {std::move(requests), id, this};
         worker.submit(std::move(task));
