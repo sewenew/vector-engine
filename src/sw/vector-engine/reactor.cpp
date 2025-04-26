@@ -80,13 +80,13 @@ void Reactor::_on_write(uv_write_t *req, int status) {
     delete req;
 }
 
-void Reactor::_on_timer(uv_timer_t *handle) {
+void Reactor::_on_timer(uv_timer_t * /*handle*/) {
 }
 
 Reactor::Reactor(const ReactorOptions &opts, const WorkerPoolSPtr &worker_pool) :
-    _loop(uv::make_loop()),
     _opts(opts),
-    _worker_pool(worker_pool) {
+    _worker_pool(worker_pool),
+    _loop(uv::make_loop()) {
     _server = uv::make_tcp_server(*_loop, _opts.tcp_opts, _on_connect, this);
 
     _stop_async = uv::make_async(*_loop, _on_stop, this);

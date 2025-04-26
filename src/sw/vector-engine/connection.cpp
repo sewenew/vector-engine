@@ -15,6 +15,7 @@
  *************************************************************************/
 
 #include "connection.h"
+#include <cassert>
 #include <iostream>
 #include "reactor.h"
 #include "resp.h"

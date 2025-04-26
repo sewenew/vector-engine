@@ -17,6 +17,7 @@
 #ifndef SW_VECTOR_ENGINE_UV_UTILS_H
 #define SW_VECTOR_ENGINE_UV_UTILS_H
 
+#include <cassert>
 #include <type_traits>
 #include <memory>
 #include <chrono>

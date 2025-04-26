@@ -15,6 +15,7 @@
  *************************************************************************/
 
 #include "read_buffer.h"
+#include <cassert>
 #include "errors.h"
 
 namespace sw::vengine {

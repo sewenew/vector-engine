@@ -133,7 +133,7 @@ TcpUPtr make_tcp_client(uv_loop_t &loop, const std::chrono::seconds &keepalive, 
     return client;
 }
 
-WriteUPtr make_write(uv_loop_t &loop, void *data) {
+WriteUPtr make_write(uv_loop_t & /*loop*/, void *data) {
     auto w = std::make_unique<uv_write_t>();
     set_data(w.get(), data);
 
