@@ -23,7 +23,7 @@
 #include <chrono>
 #include <string>
 #include <uv.h>
-#include "errors.h"
+#include "sw/vector-engine/errors.h"
 
 namespace sw::vengine {
     

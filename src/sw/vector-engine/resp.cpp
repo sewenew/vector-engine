@@ -14,8 +14,8 @@
    limitations under the License.
  *************************************************************************/
 
-#include "resp.h"
-#include "errors.h"
+#include "sw/vector-engine/resp.h"
+#include "sw/vector-engine/errors.h"
 #include <cassert>
 #include <charconv>
 

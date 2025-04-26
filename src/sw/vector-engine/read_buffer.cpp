@@ -14,9 +14,9 @@
    limitations under the License.
  *************************************************************************/
 
-#include "read_buffer.h"
+#include "sw/vector-engine/read_buffer.h"
 #include <cassert>
-#include "errors.h"
+#include "sw/vector-engine/errors.h"
 
 namespace sw::vengine {
 

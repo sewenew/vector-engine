@@ -23,7 +23,7 @@
 #include <memory>
 #include <thread>
 #include <condition_variable>
-#include "resp.h"
+#include "sw/vector-engine/resp.h"
 
 namespace sw::vengine {
 

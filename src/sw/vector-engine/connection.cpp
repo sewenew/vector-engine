@@ -14,11 +14,11 @@
    limitations under the License.
  *************************************************************************/
 
-#include "connection.h"
+#include "sw/vector-engine/connection.h"
 #include <cassert>
 #include <iostream>
-#include "reactor.h"
-#include "resp.h"
+#include "sw/vector-engine/reactor.h"
+#include "sw/vector-engine/resp.h"
 
 namespace sw::vengine {
 

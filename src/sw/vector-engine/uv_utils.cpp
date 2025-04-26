@@ -14,8 +14,8 @@
    limitations under the License.
  *************************************************************************/
 
-#include "uv_utils.h"
-#include "errors.h"
+#include "sw/vector-engine/uv_utils.h"
+#include "sw/vector-engine/errors.h"
 
 namespace sw::vengine {
 

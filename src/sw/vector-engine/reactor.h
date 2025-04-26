@@ -21,9 +21,9 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
-#include "uv_utils.h"
-#include "connection.h"
-#include "worker.h"
+#include "sw/vector-engine/uv_utils.h"
+#include "sw/vector-engine/connection.h"
+#include "sw/vector-engine/worker.h"
 
 namespace sw::vengine {
 

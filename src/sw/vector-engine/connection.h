@@ -17,8 +17,8 @@
 #ifndef SW_VECTOR_ENGINE_CONNECTION_H
 #define SW_VECTOR_ENGINE_CONNECTION_H
 
-#include "read_buffer.h"
-#include "uv_utils.h"
+#include "sw/vector-engine/read_buffer.h"
+#include "sw/vector-engine/uv_utils.h"
 
 namespace sw::vengine {
 

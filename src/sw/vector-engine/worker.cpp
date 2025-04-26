@@ -14,10 +14,10 @@
    limitations under the License.
  *************************************************************************/
 
-#include "worker.h"
+#include "sw/vector-engine/worker.h"
 #include <cctype>
-#include "resp.h"
-#include "reactor.h"
+#include "sw/vector-engine/resp.h"
+#include "sw/vector-engine/reactor.h"
 
 namespace {
 
