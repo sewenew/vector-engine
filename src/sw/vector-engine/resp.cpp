@@ -16,6 +16,10 @@
 
 #include "sw/vector-engine/resp.h"
 #include "sw/vector-engine/errors.h"
+#include "sw/vector-engine/task.h"
+#include "sw/vector-engine/ping_task.h"
+#include "sw/vector-engine/unknown_task.h"
+#include "sw/vector-engine/utils.h"
 #include <cassert>
 #include <charconv>
 
@@ -24,7 +28,7 @@ namespace sw::vengine {
 auto RespCommandParser::parse(std::string_view buffer) const
     -> std::pair<std::vector<RespCommand>, std::size_t> {
     auto *first = buffer.data();
-    std::vector<RespCommand> requests;
+    std::vector<RespCommand> cmds;
     std::size_t bytes_parsed = 0;
 
     while (true) {
@@ -33,11 +37,21 @@ auto RespCommandParser::parse(std::string_view buffer) const
             // Incomplete request.
             break;
         }
-        RespCommand req;
-        auto &args = req.args;
-        args.reserve(*argc);
+
+        if (*argc == 0) {
+            throw Error("invalid request: zero argument");
+        }
+
+        auto name = _parse_argv(buffer);
+        if (!name) {
+            // Incomplete request.
+            break;
+        }
+
+        std::vector<std::string> args;
+        args.reserve(*argc - 1);
         auto idx = 0U;
-        for ( ; idx != *argc; ++idx) {
+        for ( ; idx != *argc - 1; ++idx) {
             auto argv = _parse_argv(buffer);
             if (!argv) {
                 // Incomplete request.
@@ -46,16 +60,19 @@ auto RespCommandParser::parse(std::string_view buffer) const
             args.push_back(std::move(*argv));
         }
 
-        if (idx < *argc) {
+        if (idx < *argc - 1) {
             // Incomplete request.
             break;
         }
 
-        requests.push_back(std::move(req));
+        RespCommand cmd;
+        cmd.name = *name;
+        cmd.args = std::move(args);
+        cmds.push_back(std::move(cmd));
         bytes_parsed = (buffer.data() - first);
     }
 
-    return std::make_pair(std::move(requests), bytes_parsed);
+    return std::make_pair(std::move(cmds), bytes_parsed);
 }
 
 std::optional<std::size_t> RespCommandParser::_parse_num(char c, std::string_view &buffer) const {
@@ -145,6 +162,47 @@ RespReplyBuilder& RespReplyBuilder::_append_string(char type, const std::string_
     _buffer += reply;
 
     return *this;
+}
+
+std::string RespResponseBuilder::build(TaskOutput *output) {
+    assert(output != nullptr);
+
+    return output->to_resp_reply();
+}
+
+auto RespRequestParser::parse(std::string_view buffer) const
+    -> std::pair<std::vector<TaskUPtr>, std::size_t> {
+    RespCommandParser parser;
+    auto [cmds, len] = parser.parse(buffer);
+
+    RespTaskCreator creator;
+    std::vector<TaskUPtr> tasks;
+    for (auto &cmd : cmds) {
+        auto task = creator.create(cmd);
+        tasks.push_back(std::move(task));
+    }
+
+    return std::make_pair(std::move(tasks), len);
+}
+
+const RespTaskCreator::CreatorMap RespTaskCreator::_creators = {
+    {"ping", create_resp_task<PingTask>}
+};
+
+TaskUPtr RespTaskCreator::create(RespCommand cmd) {
+    auto name = utils::to_lower(cmd.name);
+    auto iter = _creators.find(name);
+    if (iter == _creators.end()) {
+        return _make_unknown_task(std::move(cmd));
+    }
+
+    return iter->second(std::move(cmd));
+}
+
+TaskUPtr RespTaskCreator::_make_unknown_task(RespCommand cmd) const {
+    auto unknown_task = std::make_unique<UnknownTask>();
+    unknown_task->from_resp_command(std::move(cmd));
+    return unknown_task;
 }
 
 }

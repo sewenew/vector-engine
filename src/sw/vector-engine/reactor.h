@@ -21,9 +21,10 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
-#include "sw/vector-engine/uv_utils.h"
 #include "sw/vector-engine/connection.h"
+#include "sw/vector-engine/task.h"
 #include "sw/vector-engine/worker.h"
+#include "sw/vector-engine/uv_utils.h"
 
 namespace sw::vengine {
 
@@ -31,6 +32,8 @@ struct ReactorOptions {
     TcpOptions tcp_opts;
 
     ConnectionOptions connection_opts;
+
+    ProtocolOptions protocol_opts;
 };
 
 struct ReplyContext {
@@ -64,7 +67,7 @@ public:
         _connections.erase(id);
     }
 
-    void dispatch(ConnectionId id, std::vector<RespCommand> requests);
+    void dispatch(ConnectionId id, std::vector<TaskUPtr> task, ResponseBuilderUPtr builder);
 
 private:
     static void _on_connect(uv_stream_t *server, int status);
@@ -101,7 +104,7 @@ private:
 
     uint64_t _connection_cnt = 0;
 
-    std::unordered_map<ConnectionId , uv_tcp_t*> _connections;
+    std::unordered_map<ConnectionId, uv_tcp_t*> _connections;
 
     std::mutex _mutex;
 

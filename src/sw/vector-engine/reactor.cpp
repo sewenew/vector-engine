@@ -131,7 +131,7 @@ void Reactor::_notify() {
 
 std::pair<ConnectionId, TcpUPtr> Reactor::_create_client() {
     auto id = _connection_id();
-    auto conn = std::make_unique<Connection>(id, _opts.connection_opts, *this);
+    auto conn = std::make_unique<Connection>(id, _opts.connection_opts, _opts.protocol_opts, *this);
     auto *connection = conn.get();
 
     auto client = uv::make_tcp_client(*_loop, _opts.tcp_opts.keepalive, connection);
@@ -172,11 +172,11 @@ void Reactor::_send() {
     }
 }
 
-void Reactor::dispatch(ConnectionId id, std::vector<RespCommand> requests) {
+void Reactor::dispatch(ConnectionId id, std::vector<TaskUPtr> tasks, ResponseBuilderUPtr builder) {
     try {
         auto &worker = _worker_pool->fetch(id);
-        Task task = {std::move(requests), id, this};
-        worker.submit(std::move(task));
+        BatchTask batch_task = {std::move(tasks), id, std::move(builder), this};
+        worker.submit(std::move(batch_task));
     } catch (const Error &e) {
         // TODO: worker pool has been stopped.
     }

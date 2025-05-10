@@ -19,20 +19,6 @@
 #include "sw/vector-engine/resp.h"
 #include "sw/vector-engine/reactor.h"
 
-namespace {
-
-std::string to_lower(const std::string &str) {
-    std::string res;
-    res.reserve(str.size());
-    for (auto c : str) {
-        res.push_back(std::tolower(c));
-    }
-
-    return res;
-}
-
-}
-
 namespace sw::vengine {
 
 Worker::Worker() {
@@ -47,21 +33,21 @@ Worker::~Worker() {
     }
 }
 
-void Worker::submit(Task task) {
+void Worker::submit(BatchTask batch_task) {
     {
         std::lock_guard<std::mutex> lock(_mutex);
 
-        _tasks.push_back(std::move(task));
+        _tasks.push_back(std::move(batch_task));
     }
 
     _cv.notify_one();
 }
 
 void Worker::stop() {
-    Task task;
+    BatchTask task;
     task.reactor = nullptr;
 
-    submit(task);
+    submit(std::move(task));
 }
 
 void Worker::_run() {
@@ -71,15 +57,15 @@ void Worker::_run() {
         bool stop_thread = false;
         std::vector<Reply> replies;
         replies.reserve(tasks.size());
-        for (auto &task : tasks) {
-            if (task.reactor == nullptr) {
+        for (auto &batch_task : tasks) {
+            if (batch_task.reactor == nullptr) {
                 stop_thread = true;
                 continue;
             }
-            auto reply = _run_task(task);
+            auto reply = _run_batch_task(batch_task);
             replies.emplace_back(std::move(reply));
 
-            task.reactor->send(std::move(replies));
+            batch_task.reactor->send(std::move(replies));
         }
 
         if (stop_thread) {
@@ -88,8 +74,8 @@ void Worker::_run() {
     }
 }
 
-std::vector<Task> Worker::_fetch_tasks() {
-    std::vector<Task> tasks;
+std::vector<BatchTask> Worker::_fetch_tasks() {
+    std::vector<BatchTask> tasks;
     {
         std::unique_lock<std::mutex> lock(_mutex);
 
@@ -103,52 +89,15 @@ std::vector<Task> Worker::_fetch_tasks() {
     return tasks;
 }
 
-Reply Worker::_run_task(const Task &task) {
+Reply Worker::_run_batch_task(BatchTask &batch_task) {
     Reply reply;
-    reply.connection_id = task.connection_id;
-    RespReplyBuilder builder;
-    for (const auto &cmd : task.cmds) {
-        _run_cmd(cmd, builder);
+    reply.connection_id = batch_task.connection_id;
+    for (const auto &task : batch_task.tasks) {
+        auto output = task->run();
+        reply.reply += batch_task.response_builder->build(output.get());
     }
-
-    reply.reply = std::move(builder.data());
 
     return reply;
-}
-
-void Worker::_run_cmd(const RespCommand &cmd, RespReplyBuilder &builder) {
-    const auto &args = cmd.args;
-    if (args.empty()) {
-        builder.append_error("empty arguments");
-        return;
-    }
-
-    auto name = to_lower(args.front());
-    if (name == "command") {
-        builder.append_array(1);
-        builder.append_array(6);
-        builder.append_bulk_string("command");
-        builder.append_integer(-1);
-        builder.append_array(1);
-        builder.append_bulk_string("random");
-        builder.append_integer(0);
-        builder.append_integer(0);
-        builder.append_integer(0);
-    } else if (name == "nil") {
-        builder.append_nil();
-    } else if (name == "int") {
-        builder.append_integer(1000);
-    } else if (name == "str") {
-        builder.append_simple_string("string");
-    } else if (name == "bulk") {
-        builder.append_bulk_string("bulk");
-    } else if (name == "err") {
-        builder.append_error("error");
-    } else if (name == "ping") {
-        builder.append_simple_string("PONG");
-    } else {
-        builder.append_error("unknown command: " + name);
-    }
 }
 
 WorkerPool::WorkerPool(std::size_t num) {

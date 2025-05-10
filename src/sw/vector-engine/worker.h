@@ -24,15 +24,19 @@
 #include <thread>
 #include <condition_variable>
 #include "sw/vector-engine/resp.h"
+#include "sw/vector-engine/task.h"
+#include "sw/vector-engine/protocol.h"
 
 namespace sw::vengine {
 
 class Reactor;
 
-struct Task {
-    std::vector<RespCommand> cmds;
+struct BatchTask {
+    std::vector<TaskUPtr> tasks;
 
     uint64_t connection_id;
+
+    ResponseBuilderUPtr response_builder;
 
     Reactor *reactor;
 };
@@ -49,22 +53,22 @@ public:
 
     ~Worker();
 
-    void submit(Task task);
+    void submit(BatchTask task);
 
     void stop();
 
 private:
     void _run();
 
-    std::vector<Task> _fetch_tasks();
+    std::vector<BatchTask> _fetch_tasks();
 
-    Reply _run_task(const Task &task);
+    Reply _run_batch_task(BatchTask &batch_task);
 
-    void _run_cmd(const RespCommand &cmd, RespReplyBuilder &builder);
+    void _run_task(Task *task);
 
     std::thread _worker;
 
-    std::vector<Task> _tasks;
+    std::vector<BatchTask> _tasks;
 
     std::mutex _mutex;
 

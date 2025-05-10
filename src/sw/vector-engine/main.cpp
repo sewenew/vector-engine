@@ -14,6 +14,7 @@ int main() {
         opts.tcp_opts.nodelay = true;
         opts.connection_opts.read_buf_min_size = 64 * 1024;
         opts.connection_opts.read_buf_max_size = 20 * 1024 * 1024;
+        opts.protocol_opts.type = sw::vengine::ProtocolType::RESP;
         sw::vengine::Reactor reactor(opts, pool);
         std::string input;
         while (std::getline(std::cin, input)) {

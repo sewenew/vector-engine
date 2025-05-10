@@ -34,6 +34,10 @@ set(VECTOR_ENGINE_APP_SOURCES
         "${VECTOR_ENGINE_SOURCE_DIR}/resp.cpp"
         "${VECTOR_ENGINE_SOURCE_DIR}/uv_utils.cpp"
         "${VECTOR_ENGINE_SOURCE_DIR}/worker.cpp"
+        "${VECTOR_ENGINE_SOURCE_DIR}/utils.cpp"
+        "${VECTOR_ENGINE_SOURCE_DIR}/ping_task.cpp"
+        "${VECTOR_ENGINE_SOURCE_DIR}/unknown_task.cpp"
+        "${VECTOR_ENGINE_SOURCE_DIR}/protocol.cpp"
         "${VECTOR_ENGINE_SOURCE_DIR}/main.cpp"
 )
 

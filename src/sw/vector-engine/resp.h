@@ -17,15 +17,25 @@
 #ifndef SW_VECTOR_ENGINE_RESP_H
 #define SW_VECTOR_ENGINE_RESP_H
 
-#include <vector>
+#include <memory>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <optional>
+#include <unordered_map>
+#include <vector>
+#include "sw/vector-engine/protocol.h"
 
 namespace sw::vengine {
 
+class Task;
+class TaskOutput;
+
+using RespArgs = std::vector<std::string>;
+
 struct RespCommand {
-    std::vector<std::string> args;
+    std::string name;
+    RespArgs args;
 };
 
 class RespCommandParser {
@@ -44,6 +54,8 @@ private:
 
     std::optional<std::string> _parse_argv(std::string_view &data) const;
 };
+
+using RespReply = std::string;
 
 class RespReplyBuilder {
 public:
@@ -80,7 +92,7 @@ public:
         return _append_string('*', std::to_string(size));
     }
 
-    std::string& data() {
+    RespReply& data() {
         return _buffer;
     }
 
@@ -88,6 +100,37 @@ private:
     RespReplyBuilder& _append_string(char type, const std::string_view &str);
 
     std::string _buffer;
+};
+
+class RespResponseBuilder : public ResponseBuilder {
+public:
+    virtual std::string build(TaskOutput *output) override;
+};
+
+class RespRequestParser : public RequestParser {
+public:
+    virtual auto parse(std::string_view buffer) const
+        -> std::pair<std::vector<std::unique_ptr<Task>>, std::size_t> override;
+};
+
+template <typename T>
+std::unique_ptr<Task> create_resp_task(RespCommand cmd) {
+    auto task = std::make_unique<T>();
+    task->from_resp_command(std::move(cmd));
+
+    return task;
+}
+
+class RespTaskCreator {
+public:
+    std::unique_ptr<Task> create(RespCommand cmd);
+
+private:
+    std::unique_ptr<Task> _make_unknown_task(RespCommand cmd) const;
+
+    // map<type, creator>
+    using CreatorMap = std::unordered_map<std::string, std::function<std::unique_ptr<Task> (RespCommand)>>;
+    static const CreatorMap _creators;
 };
 
 }

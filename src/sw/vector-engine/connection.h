@@ -18,11 +18,13 @@
 #define SW_VECTOR_ENGINE_CONNECTION_H
 
 #include "sw/vector-engine/read_buffer.h"
+#include "sw/vector-engine/protocol.h"
 #include "sw/vector-engine/uv_utils.h"
 
 namespace sw::vengine {
 
 class Reactor;
+class Task;
 
 struct ConnectionOptions {
     std::size_t read_buf_min_size;
@@ -33,7 +35,10 @@ using ConnectionId = uint64_t;
 
 class Connection {
 public:
-    Connection(ConnectionId id, const ConnectionOptions &opts, Reactor &reactor);
+    Connection(ConnectionId id,
+        const ConnectionOptions &opts,
+        const ProtocolOptions &protocol_opts,
+        Reactor &reactor);
 
     Connection(const Connection &) = delete;
     Connection& operator=(const Connection &) = delete;
@@ -54,9 +59,14 @@ public:
     static void on_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf);
 
 private:
+    auto _parse_request(std::string_view buffer) const
+        -> std::pair<std::vector<std::unique_ptr<Task>>, std::size_t>;
+
     ConnectionId _id;
 
     ReadBuffer _read_buf;
+
+    ProtocolOptions _protocol_opts;
 
     Reactor &_reactor;
 };

@@ -19,6 +19,7 @@
 #include <iostream>
 #include "sw/vector-engine/reactor.h"
 #include "sw/vector-engine/resp.h"
+#include "sw/vector-engine/task.h"
 
 namespace sw::vengine {
 
@@ -52,15 +53,15 @@ void Connection::on_read(uv_stream_t *client, ssize_t nread, const uv_buf_t * /*
         buffer.occupy(nread);
 
         try {
-            RespCommandParser parser;
-            auto [requests, len] = parser.parse(buffer.data());
-
-            if (!requests.empty()) {
+            auto [tasks, len] = conn->_parse_request(buffer.data());
+            if (!tasks.empty()) {
                 assert(len > 0);
 
                 buffer.dealloc(len);
 
-                conn->_reactor.dispatch(conn->id(), std::move(requests));
+                ResponseBuilderCreator creator;
+                auto response_builder = creator.create(conn->_protocol_opts.type);
+                conn->_reactor.dispatch(conn->id(), std::move(tasks), std::move(response_builder));
             }
         } catch (const Error &e) {
             // TODO: do log and send error reply
@@ -81,11 +82,20 @@ void Connection::on_read(uv_stream_t *client, ssize_t nread, const uv_buf_t * /*
 }
 
 Connection::Connection(ConnectionId id,
-        const ConnectionOptions &opts,
-        Reactor &reactor) :
+    const ConnectionOptions &opts,
+    const ProtocolOptions &protocol_opts,
+    Reactor &reactor) :
     _id(id),
     _read_buf(opts.read_buf_min_size, opts.read_buf_max_size),
+    _protocol_opts(protocol_opts),
     _reactor(reactor) {
+}
+
+auto Connection::_parse_request(std::string_view buffer) const
+    -> std::pair<std::vector<TaskUPtr>, std::size_t> {
+    RequestParserCreator creator;
+    auto parser = creator.create(_protocol_opts.type);
+    return parser->parse(buffer);
 }
 
 }
