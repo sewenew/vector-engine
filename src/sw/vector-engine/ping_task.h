@@ -31,7 +31,7 @@ public:
     virtual TaskOutputUPtr run() override;
 };
 
-class PingOutput : public TaskOutput {
+class PingTaskOutput : public TaskOutput {
 public:
     virtual RespReply to_resp_reply() override;
 };

@@ -19,10 +19,10 @@
 namespace sw::vengine {
 
 TaskOutputUPtr PingTask::run() {
-    return std::make_unique<PingOutput>();
+    return std::make_unique<PingTaskOutput>();
 }
 
-RespReply PingOutput::to_resp_reply() {
+RespReply PingTaskOutput::to_resp_reply() {
     RespReplyBuilder builder;
     builder.append_simple_string("PONG");
 

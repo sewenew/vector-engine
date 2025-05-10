@@ -14,10 +14,10 @@
    limitations under the License.
  *************************************************************************/
 
-#include "sw/vector-engine/utils.h"
+#include "sw/vector-engine/string_utils.h"
 #include <cctype>
 
-namespace sw::vengine::utils {
+namespace sw::vengine::string_utils {
 
 std::string to_lower(const std::string &str) {
     std::string res;

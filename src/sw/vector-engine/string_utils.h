@@ -14,15 +14,15 @@
    limitations under the License.
  *************************************************************************/
 
-#ifndef SW_VECTOR_ENGINE_UTILS_H
-#define SW_VECTOR_ENGINE_UTILS_H
+#ifndef SW_VECTOR_ENGINE_STRING_UTILS_H
+#define SW_VECTOR_ENGINE_STRING_UTILS_H
 
 #include <string>
 
-namespace sw::vengine::utils {
+namespace sw::vengine::string_utils {
 
 std::string to_lower(const std::string &str);
 
 }
 
-#endif // end SW_VECTOR_ENGINE_UTILS_H
+#endif // end SW_VECTOR_ENGINE_STRING_UTILS_H
