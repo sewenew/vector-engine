@@ -19,7 +19,7 @@
 #include "sw/vector-engine/task.h"
 #include "sw/vector-engine/ping_task.h"
 #include "sw/vector-engine/unknown_task.h"
-#include "sw/vector-engine/string_utils.h"
+#include "sw/vector-engine/str_utils.h"
 #include <cassert>
 #include <charconv>
 
@@ -190,7 +190,7 @@ const RespTaskCreator::CreatorMap RespTaskCreator::_creators = {
 };
 
 TaskUPtr RespTaskCreator::create(RespCommand cmd) {
-    auto name = string_utils::to_lower(cmd.name);
+    auto name = str::to_lower(cmd.name);
     auto iter = _creators.find(name);
     if (iter == _creators.end()) {
         return _make_unknown_task(std::move(cmd));

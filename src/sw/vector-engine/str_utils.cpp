@@ -14,15 +14,19 @@
    limitations under the License.
  *************************************************************************/
 
-#ifndef SW_VECTOR_ENGINE_STRING_UTILS_H
-#define SW_VECTOR_ENGINE_STRING_UTILS_H
+#include "sw/vector-engine/str_utils.h"
+#include <cctype>
 
-#include <string>
+namespace sw::vengine::str {
 
-namespace sw::vengine::string_utils {
+std::string to_lower(const std::string &str) {
+    std::string res;
+    res.reserve(str.size());
+    for (auto c : str) {
+        res.push_back(std::tolower(c));
+    }
 
-std::string to_lower(const std::string &str);
-
+    return res;
 }
 
-#endif // end SW_VECTOR_ENGINE_STRING_UTILS_H
+}
