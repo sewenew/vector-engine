@@ -15,6 +15,9 @@ else()
     endif()
 endif()
 
+# Dependencies
+set(VECTOR_ENGINE_DEPS deps)
+
 # libuv dependency
 find_path(VECTOR_ENGINE_ASYNC_LIB_HEADER NAMES uv.h)
 find_library(VECTOR_ENGINE_ASYNC_LIB uv)
@@ -29,6 +32,7 @@ set(VECTOR_ENGINE_LIB_SOURCES
 
 set(VECTOR_ENGINE_APP_SOURCES
         "${VECTOR_ENGINE_SOURCE_DIR}/connection.cpp"
+        "${VECTOR_ENGINE_SOURCE_DIR}/logger.cpp"
         "${VECTOR_ENGINE_SOURCE_DIR}/reactor.cpp"
         "${VECTOR_ENGINE_SOURCE_DIR}/read_buffer.cpp"
         "${VECTOR_ENGINE_SOURCE_DIR}/resp.cpp"
@@ -127,6 +131,7 @@ if(VECTOR_ENGINE_BUILD_APP)
     target_include_directories(${VECTOR_ENGINE_APP} PUBLIC
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/${VECTOR_ENGINE_HEADER_DIR}>
             $<BUILD_INTERFACE:${VECTOR_ENGINE_ASYNC_LIB_HEADER}>
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/${VECTOR_ENGINE_DEPS}>
             $<INSTALL_INTERFACE:include>)
     target_link_libraries(${VECTOR_ENGINE_APP} PUBLIC ${VECTOR_ENGINE_ASYNC_LIB})
 
