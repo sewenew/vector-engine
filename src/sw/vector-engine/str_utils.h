@@ -17,11 +17,23 @@
 #ifndef SW_VECTOR_ENGINE_STR_UTILS_H
 #define SW_VECTOR_ENGINE_STR_UTILS_H
 
+#include <algorithm>
 #include <string>
+#include <string_view>
 
 namespace sw::vengine::str {
 
-std::string to_lower(const std::string &str);
+std::string to_lower(const std::string_view &str);
+
+std::string_view trim(const std::string_view &str);
+
+std::string_view trim_left(const std::string_view &str);
+
+std::string_view trim_right(const std::string_view &str);
+
+bool starts_with(const std::string_view &str, const std::string_view &prefix);
+
+bool ends_with(const std::string_view &str, const std::string_view &postfix);
 
 }
 
