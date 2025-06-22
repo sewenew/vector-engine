@@ -14,37 +14,22 @@
    limitations under the License.
  *************************************************************************/
 
-#include "sw/vector-engine/protocol.h"
-#include "sw/vector-engine/task.h"
-#include "sw/vector-engine/resp.h"
 #include "sw/vector-engine/json_rpc.h"
+#include "sw/vector-engine/errors.h"
+#include "sw/vector-engine/task.h"
+#include <cassert>
 
 namespace sw::vengine {
 
-ResponseBuilderUPtr ResponseBuilderCreator::create(ProtocolType type) const {
-    switch (type) {
-    case ProtocolType::RESP:
-        return std::make_unique<RespResponseBuilder>();
-
-    case ProtocolType::JSON_RPC:
-        return std::make_unique<JsonRpcResponseBuilder>();
-
-    default:
-        throw Error("unknown protocol type");
-    }
+auto JsonRpcRequestParser::parse(std::string_view buffer) const
+    -> std::pair<std::vector<TaskUPtr>, std::size_t> {
+    return std::make_pair({}, 0);
 }
 
-RequestParserUPtr RequestParserCreator::create(ProtocolType type) const {
-    switch (type) {
-    case ProtocolType::RESP:
-        return std::make_unique<RespRequestParser>();
+std::string JsonRpcResponseBuilder::build(TaskOutput *output) {
+    assert(output != nullptr);
 
-    case ProtocolType::JSON_RPC:
-        return std::make_unique<JsonRpcRequestParser>();
-
-    default:
-        throw Error("unknown protocol type");
-    }
+    return output->to_mcp_reply();
 }
 
 }

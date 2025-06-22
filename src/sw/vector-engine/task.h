@@ -20,6 +20,7 @@
 #include <unordered_map>
 #include "sw/vector-engine/connection.h"
 #include "sw/vector-engine/resp.h"
+#include "sw/vector-engine/json_rpc.h"
 
 namespace sw::vengine {
 
@@ -28,6 +29,8 @@ public:
     virtual ~TaskOutput() = default;
 
     virtual RespReply to_resp_reply() = 0;
+
+    virtual JsonRpcReply to_json_rpc_reply() = 0;
 };
 
 using TaskOutputUPtr = std::unique_ptr<TaskOutput>;
@@ -37,6 +40,8 @@ public:
     virtual ~Task() = default;
 
     virtual void from_resp_command(RespCommand cmd) = 0;
+
+    virtual void from_json_rpc_request(JsonRpcRequest req) = 0;
 
     virtual TaskOutputUPtr run() = 0;
 };

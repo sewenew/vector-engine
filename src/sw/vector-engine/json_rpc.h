@@ -14,53 +14,39 @@
    limitations under the License.
  *************************************************************************/
 
-#ifndef SW_VECTOR_ENGINE_PROTOCOL_H
-#define SW_VECTOR_ENGINE_PROTOCOL_H
+#ifndef SW_VECTOR_ENGINE_JSON_RPC_H
+#define SW_VECTOR_ENGINE_JSON_RPC_H
 
 #include <memory>
+#include <functional>
 #include <string>
+#include <string_view>
+#include <optional>
+#include <unordered_map>
+#include <vector>
+#include "nlohmann/json.hpp"
+#include "sw/vector-engine/protocol.h"
 
 namespace sw::vengine {
 
-class TaskOutput;
 class Task;
+class TaskOutput;
 
-enum class ProtocolType {
-    RESP = 0
-    JSON_RPC,
-};
+using JsonRpcReply = std::string;
 
-struct ProtocolOptions {
-    ProtocolType type;
-};
+using JsonRpcRequest = nlohmann::json;
 
-class ResponseBuilder {
+class JsonRpcResponseBuilder : public ResponseBuilder {
 public:
-    virtual ~ResponseBuilder() = default;
-
-    virtual std::string build(TaskOutput *output) = 0;
-};
-using ResponseBuilderUPtr = std::unique_ptr<ResponseBuilder>;
-
-class ResponseBuilderCreator {
-public:
-    ResponseBuilderUPtr create(ProtocolType type) const;
+    virtual std::string build(TaskOutput *output) override;
 };
 
-class RequestParser {
+class JsonRpcRequestParser : public RequestParser {
 public:
-    virtual ~RequestParser() = default;
-
     virtual auto parse(std::string_view buffer) const
-        -> std::pair<std::vector<std::unique_ptr<Task>>, std::size_t> = 0;
-};
-using RequestParserUPtr = std::unique_ptr<RequestParser>;
-
-class RequestParserCreator {
-public:
-    RequestParserUPtr create(ProtocolType type) const;
+        -> std::pair<std::vector<std::unique_ptr<Task>>, std::size_t> override;
 };
 
 }
 
-#endif // end SW_VECTOR_ENGINE_PROTOCOL_H
+#endif // end SW_VECTOR_ENGINE_JSON_RPC_H
